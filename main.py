@@ -1,35 +1,83 @@
 import asyncio
 
-from aiogram import Bot, Dispatcher, Router
-from aiogram.filters import CommandStart
-from aiogram.types import Message
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from loguru import logger
 
-from config import BOT_TOKEN
+from config import load_bots_config
 from utils import setup_logging, init_db, close_db
+from handlers import create_router
+from scheduler import scheduler_loop
 
-router = Router()
 
+async def run_bot(bot_config: dict):
+    bot = Bot(
+        token=bot_config["bot_token"],
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
 
-@router.message(CommandStart())
-async def cmd_start(message: Message):
-    await message.answer("Hello!")
+    me = await bot.get_me()
+    bot_config["bot_id"] = me.id
+    bot_config["bot_username"] = me.username
+
+    try:
+        chat = await bot.get_chat(bot_config["channel_id"])
+        bot_config["channel_title"] = chat.title
+        bot_config["channel_username"] = chat.username
+    except Exception as e:
+        logger.warning(f"[@{me.username}] Could not fetch channel info: {e}")
+        bot_config["channel_title"] = "Unknown"
+        bot_config["channel_username"] = None
+
+    dp = Dispatcher()
+    dp["bot_config"] = bot_config
+    dp.include_router(create_router())
+
+    logger.info(
+        f"Bot @{me.username} (ID: {me.id}) started "
+        f"for channel \"{bot_config.get('channel_title', 'Unknown')}\""
+    )
+
+    scheduler_task = asyncio.create_task(scheduler_loop(bot, bot_config))
+
+    try:
+        await dp.start_polling(
+            bot,
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "chat_join_request",
+                "chat_member",
+                "my_chat_member",
+            ],
+        )
+    finally:
+        scheduler_task.cancel()
+        await bot.session.close()
 
 
 async def main():
     setup_logging()
     await init_db()
 
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher()
-    dp.include_router(router)
+    bots_config = load_bots_config()
 
-    logger.info("Bot started")
+    if not bots_config:
+        logger.error("No bots configured in bots.json")
+        return
+
+    logger.info(f"Starting {len(bots_config)} bot(s)...")
+
+    tasks = [asyncio.create_task(run_bot(cfg)) for cfg in bots_config]
+
     try:
-        await dp.start_polling(bot)
+        await asyncio.gather(*tasks)
     finally:
+        for task in tasks:
+            task.cancel()
         await close_db()
-        logger.info("Bot stopped")
+        logger.info("All bots stopped")
 
 
 if __name__ == "__main__":

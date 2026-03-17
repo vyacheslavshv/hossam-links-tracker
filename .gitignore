@@ -2,6 +2,7 @@ TODO.txt
 data/
 logs/
 .env
+bots.json
 .venv
 venv/
 
