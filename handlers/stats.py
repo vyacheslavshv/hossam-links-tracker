@@ -14,7 +14,6 @@ async def build_stats(bot_config: dict, root: bool) -> tuple[str, InlineKeyboard
         text = "📊 <b>Tracking Statistics</b>\n\nNo active links found."
         buttons = [
             [InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")],
-            [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
         ]
         return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 

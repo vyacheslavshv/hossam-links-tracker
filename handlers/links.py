@@ -48,12 +48,7 @@ async def process_link_name(message: Message, state: FSMContext, bot_config: dic
             creates_join_request=True,
         )
     except Exception as e:
-        await message.answer(
-            f"❌ Failed to create link:\n<code>{e}</code>",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
-            ]),
-        )
+        await message.answer(f"❌ Failed to create link:\n<code>{e}</code>")
         await state.clear()
         return
 
@@ -69,10 +64,6 @@ async def process_link_name(message: Message, state: FSMContext, bot_config: dic
         f"🔗 Name: {name}\n"
         f"URL: <code>{link.invite_link}</code>\n\n"
         f"Share this link to invite members.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📊 Statistics", callback_data="stats")],
-            [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
-        ]),
     )
 
 

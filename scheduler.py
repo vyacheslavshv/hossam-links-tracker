@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from loguru import logger
 
 from models import InviteLink, MemberEvent, JoinRequest
@@ -52,13 +51,9 @@ async def send_daily_report(bot: Bot, bot_config: dict):
         f"👥 Total Members: <b>{total_current}</b>"
     )
 
-    menu_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏠 Menu", callback_data="open_menu")]
-    ])
-
     for admin_id in bot_config.get("admin_ids", []):
         try:
-            await bot.send_message(chat_id=admin_id, text=text, reply_markup=menu_kb)
+            await bot.send_message(chat_id=admin_id, text=text)
         except Exception as e:
             logger.error(f"Failed to send daily report to {admin_id}: {e}")
 

@@ -32,7 +32,6 @@ def build_settings_content(settings: BotSettings, bot_config: dict) -> tuple[str
             text=f"{notif_icon} Notifications to channel",
             callback_data="toggle:notifications",
         )],
-        [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
     ]
 
     return text, InlineKeyboardMarkup(inline_keyboard=buttons)

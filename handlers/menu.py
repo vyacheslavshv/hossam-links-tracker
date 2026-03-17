@@ -4,7 +4,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
     ReplyKeyboardMarkup, KeyboardButton,
 )
 
@@ -35,17 +34,6 @@ def reply_kb(root: bool = True) -> ReplyKeyboardMarkup:
     if root:
         buttons.append([KeyboardButton(text="⚙️ Settings")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
-
-
-def main_menu_kb(root: bool = True) -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text="📊 All Statistics", callback_data="stats")],
-    ]
-    if root:
-        buttons.append([InlineKeyboardButton(text="🔗 Create Tracking Link", callback_data="create_link")])
-    if root:
-        buttons.append([InlineKeyboardButton(text="⚙️ Settings", callback_data="settings")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def menu_text(bot_config: dict) -> str:
@@ -88,22 +76,13 @@ async def process_password(message: Message, state: FSMContext, bot_config: dict
         await message.answer("❌ Wrong password. Try again:")
 
 
-# ── Menu callbacks ──
+# ── Menu callback (for legacy inline buttons) ──
 
 async def cb_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
     await state.clear()
     await refresh_channel_info(callback.bot, bot_config)
     root = is_root_admin(callback.from_user.id, bot_config)
-    await callback.message.edit_text(menu_text(bot_config), reply_markup=main_menu_kb(root))
-    await callback.answer()
-
-
-async def cb_open_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
-    """Opens menu as a NEW message (so the notification/report stays visible)."""
-    await state.clear()
-    await refresh_channel_info(callback.bot, bot_config)
-    root = is_root_admin(callback.from_user.id, bot_config)
-    await callback.message.answer(menu_text(bot_config), reply_markup=main_menu_kb(root))
+    await callback.message.answer(menu_text(bot_config), reply_markup=reply_kb(root))
     await callback.answer()
 
 
@@ -113,5 +92,4 @@ def create_router() -> Router:
     router.message.register(cmd_start_auth, CommandStart())
     router.message.register(process_password, Auth.waiting_password)
     router.callback_query.register(cb_menu, F.data == "menu", IsAdmin())
-    router.callback_query.register(cb_open_menu, F.data == "open_menu", IsAdmin())
     return router
