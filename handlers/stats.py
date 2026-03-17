@@ -73,8 +73,7 @@ async def build_stats(bot_config: dict, root: bool) -> tuple[str, InlineKeyboard
 
     text = "\n".join(parts)
     buttons = [
-        [InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")],
-        [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
+        [InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")]
     ]
     return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
