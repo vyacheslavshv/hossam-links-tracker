@@ -45,6 +45,7 @@ async def run_bot(bot_config: dict):
     try:
         await dp.start_polling(
             bot,
+            handle_signals=False,
             allowed_updates=[
                 "message",
                 "callback_query",
