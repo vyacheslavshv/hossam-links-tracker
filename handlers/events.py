@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import html
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -151,9 +153,6 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
             ]
         ])
 
-        # Notify in notification channel (without buttons)
-        await send_notification(event.bot, bot_config, text)
-
         # Send to admins in DM with approve/decline buttons
         for admin_id in bot_config.get("admin_ids", []):
             try:
@@ -232,9 +231,6 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
             is_premium=user.is_premium or False,
             event_type="left",
         )
-
-        text = format_leave_notification(user, chat, timestamp)
-        await send_notification(event.bot, bot_config, text)
 
         logger.info(f"[{bot_id}] User {user.id} ({user.full_name}) left")
 

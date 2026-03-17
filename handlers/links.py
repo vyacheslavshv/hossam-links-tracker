@@ -1,4 +1,5 @@
 from aiogram import Router, F, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -60,7 +61,7 @@ async def process_link_name(message: Message, state: FSMContext, bot_config: dic
     await message.answer(
         f"✅ <b>Link Created!</b>\n\n"
         f"🔗 Name: {name}\n"
-        f"🔗 URL: <code>{link.invite_link}</code>\n\n"
+        f"URL: <code>{link.invite_link}</code>\n\n"
         f"Share this link to invite members.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📊 Statistics", callback_data="stats")],
@@ -90,7 +91,7 @@ async def cb_links_list(callback: CallbackQuery, bot_config: dict):
         left = await MemberEvent.filter(invite_link=link, event_type="left").count()
         current = joined - left
         buttons.append([InlineKeyboardButton(
-            text=f"🔗 {link.name} — 👤 {current}",
+            text=f"{link.name} — 👤 {current}",
             callback_data=f"link:{link.id}",
         )])
     buttons.append([InlineKeyboardButton(text="🔗 Create Link", callback_data="create_link")])
@@ -121,7 +122,7 @@ async def cb_link_detail(callback: CallbackQuery, bot_config: dict):
     text = (
         f"📊 <b>Tracking Statistics</b>\n\n"
         f"🔗 Name: {link.name}\n"
-        f"🔗 URL: <code>{link.url}</code>\n"
+        f"URL: <code>{link.url}</code>\n\n"
         f"⏳ Pending Requests: {pending}\n"
         f"🚫 Declined: {declined}\n"
         f"📥 Joined: {joined}\n"
@@ -132,14 +133,17 @@ async def cb_link_detail(callback: CallbackQuery, bot_config: dict):
     buttons = [
         [InlineKeyboardButton(text="🔄 Refresh", callback_data=f"link:{link.id}")],
         [InlineKeyboardButton(text="🗑 Revoke Link", callback_data=f"revoke:{link.id}")],
-        [InlineKeyboardButton(text="🔙 All Links", callback_data="links_list")],
+        [InlineKeyboardButton(text="📋 All Links", callback_data="links_list")],
         [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
     ]
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 

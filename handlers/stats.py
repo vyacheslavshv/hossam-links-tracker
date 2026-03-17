@@ -2,6 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from .filters import IsAdmin
@@ -34,13 +35,13 @@ async def cb_stats(callback: CallbackQuery, bot_config: dict):
     text = (
         f"📊 <b>Overall Statistics</b>\n\n"
         f"👤 Current Members: <b>{total_current}</b>\n"
-        f"📥 Total Joined: {total_joined}\n"
-        f"📤 Total Left: {total_left}\n"
-        f"⏳ Pending Requests: {total_pending}\n\n"
+        f"Joined: {total_joined}\n"
+        f"Left: {total_left}\n"
+        f"Pending: {total_pending}\n\n"
         f"📈 <b>Today:</b>\n"
-        f"   📥 Joined: {today_joined}\n"
-        f"   📤 Left: {today_left}\n"
-        f"   📊 Net: {'+' if net >= 0 else ''}{net}"
+        f"   Joined: {today_joined}\n"
+        f"   Left: {today_left}\n"
+        f"   Net: {'+' if net >= 0 else ''}{net}"
     )
 
     buttons = []
@@ -55,10 +56,13 @@ async def cb_stats(callback: CallbackQuery, bot_config: dict):
     buttons.append([InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")])
     buttons.append([InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")])
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 
@@ -80,7 +84,7 @@ async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
     text = (
         f"📊 <b>Tracking Statistics</b>\n\n"
         f"🔗 Name: {link.name}\n"
-        f"🔗 URL: <code>{link.url}</code>\n"
+        f"URL: <code>{link.url}</code>\n\n"
         f"⏳ Pending Requests: {pending}\n"
         f"🚫 Declined: {declined}\n"
         f"📥 Joined: {joined}\n"
@@ -90,12 +94,15 @@ async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
 
     buttons = [
         [InlineKeyboardButton(text="🔄 Refresh", callback_data=f"stats_link:{link.id}")],
-        [InlineKeyboardButton(text="🔙 All Stats", callback_data="stats")],
+        [InlineKeyboardButton(text="📊 All Stats", callback_data="stats")],
         [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
     ]
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+    except TelegramBadRequest:
+        pass
     await callback.answer()
