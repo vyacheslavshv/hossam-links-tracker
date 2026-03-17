@@ -9,7 +9,7 @@ from aiogram.types import ChatJoinRequest, ChatMemberUpdated, CallbackQuery
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from loguru import logger
 
-from .filters import IsAdmin
+from .filters import IsRootAdmin
 from models import BotSettings, InviteLink, JoinRequest, MemberEvent
 
 router = Router()
@@ -237,7 +237,7 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
 
 # ── Approve / Decline callbacks ──
 
-@router.callback_query(F.data.startswith("req_approve:"), IsAdmin())
+@router.callback_query(F.data.startswith("req_approve:"), IsRootAdmin())
 async def cb_approve_request(callback: CallbackQuery, bot_config: dict):
     request_id = int(callback.data.split(":")[1])
     jr = await JoinRequest.get_or_none(id=request_id)
@@ -265,7 +265,7 @@ async def cb_approve_request(callback: CallbackQuery, bot_config: dict):
         await callback.answer(f"❌ Failed: {e}", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("req_decline:"), IsAdmin())
+@router.callback_query(F.data.startswith("req_decline:"), IsRootAdmin())
 async def cb_decline_request(callback: CallbackQuery, bot_config: dict):
     request_id = int(callback.data.split(":")[1])
     jr = await JoinRequest.get_or_none(id=request_id)

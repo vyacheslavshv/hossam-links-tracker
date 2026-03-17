@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-from .filters import IsAdmin
+from .filters import IsRootAdmin
 from models import BotSettings, JoinRequest
 
 router = Router()
@@ -53,13 +53,13 @@ async def show_settings(callback: CallbackQuery, bot_config: dict):
     )
 
 
-@router.callback_query(F.data == "settings", IsAdmin())
+@router.callback_query(F.data == "settings", IsRootAdmin())
 async def cb_settings(callback: CallbackQuery, bot_config: dict):
     await show_settings(callback, bot_config)
     await callback.answer()
 
 
-@router.callback_query(F.data == "toggle:auto_approve", IsAdmin())
+@router.callback_query(F.data == "toggle:auto_approve", IsRootAdmin())
 async def cb_toggle_auto_approve(callback: CallbackQuery, bot_config: dict):
     settings = await get_settings(bot_config["bot_id"])
     settings.auto_approve = not settings.auto_approve
@@ -70,7 +70,7 @@ async def cb_toggle_auto_approve(callback: CallbackQuery, bot_config: dict):
     await callback.answer(f"Auto-approve {status}")
 
 
-@router.callback_query(F.data == "toggle:notifications", IsAdmin())
+@router.callback_query(F.data == "toggle:notifications", IsRootAdmin())
 async def cb_toggle_notifications(callback: CallbackQuery, bot_config: dict):
     settings = await get_settings(bot_config["bot_id"])
     settings.notifications_enabled = not settings.notifications_enabled
@@ -81,7 +81,7 @@ async def cb_toggle_notifications(callback: CallbackQuery, bot_config: dict):
     await callback.answer(f"Notifications {status}")
 
 
-@router.callback_query(F.data == "clear_pending", IsAdmin())
+@router.callback_query(F.data == "clear_pending", IsRootAdmin())
 async def cb_clear_pending(callback: CallbackQuery, bot_config: dict):
     deleted = await JoinRequest.filter(
         bot_id=bot_config["bot_id"], status="pending"

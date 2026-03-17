@@ -5,7 +5,7 @@ from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-from .filters import IsAdmin
+from .filters import IsAdmin, is_root_admin
 from models import InviteLink, MemberEvent, JoinRequest
 
 router = Router()
@@ -13,36 +13,47 @@ router = Router()
 
 @router.callback_query(F.data == "stats", IsAdmin())
 async def cb_stats(callback: CallbackQuery, bot_config: dict):
+    root = is_root_admin(callback.from_user.id, bot_config)
     bot_id = bot_config["bot_id"]
     tz = ZoneInfo(bot_config.get("timezone", "Europe/Berlin"))
 
     total_joined = await MemberEvent.filter(bot_id=bot_id, event_type="joined").count()
-    total_left = await MemberEvent.filter(bot_id=bot_id, event_type="left").count()
-    total_pending = await JoinRequest.filter(bot_id=bot_id, status="pending").count()
-    total_current = total_joined - total_left
 
     today = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
     today_joined = await MemberEvent.filter(
         bot_id=bot_id, event_type="joined", created_at__gte=today
     ).count()
-    today_left = await MemberEvent.filter(
-        bot_id=bot_id, event_type="left", created_at__gte=today
-    ).count()
-    net = today_joined - today_left
+
+    if root:
+        total_left = await MemberEvent.filter(bot_id=bot_id, event_type="left").count()
+        total_pending = await JoinRequest.filter(bot_id=bot_id, status="pending").count()
+        total_current = total_joined - total_left
+
+        today_left = await MemberEvent.filter(
+            bot_id=bot_id, event_type="left", created_at__gte=today
+        ).count()
+        net = today_joined - today_left
+
+        text = (
+            f"📊 <b>Overall Statistics</b>\n\n"
+            f"👤 Current Members: <b>{total_current}</b>\n"
+            f"Joined: {total_joined}\n"
+            f"Left: {total_left}\n"
+            f"Pending: {total_pending}\n\n"
+            f"📈 <b>Today:</b>\n"
+            f"   Joined: {today_joined}\n"
+            f"   Left: {today_left}\n"
+            f"   Net: {'+' if net >= 0 else ''}{net}"
+        )
+    else:
+        text = (
+            f"📊 <b>Overall Statistics</b>\n\n"
+            f"📥 Total Joined: <b>{total_joined}</b>\n\n"
+            f"📈 <b>Today:</b>\n"
+            f"   Joined: {today_joined}"
+        )
 
     links = await InviteLink.filter(bot_id=bot_id, revoked=False).order_by("-created_at")
-
-    text = (
-        f"📊 <b>Overall Statistics</b>\n\n"
-        f"👤 Current Members: <b>{total_current}</b>\n"
-        f"Joined: {total_joined}\n"
-        f"Left: {total_left}\n"
-        f"Pending: {total_pending}\n\n"
-        f"📈 <b>Today:</b>\n"
-        f"   Joined: {today_joined}\n"
-        f"   Left: {today_left}\n"
-        f"   Net: {'+' if net >= 0 else ''}{net}"
-    )
 
     buttons = []
     for link in links:
@@ -68,6 +79,7 @@ async def cb_stats(callback: CallbackQuery, bot_config: dict):
 
 @router.callback_query(F.data.startswith("stats_link:"), IsAdmin())
 async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
+    root = is_root_admin(callback.from_user.id, bot_config)
     link_id = int(callback.data.split(":")[1])
     link = await InviteLink.get_or_none(id=link_id, bot_id=bot_config["bot_id"])
 
@@ -76,21 +88,30 @@ async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
         return
 
     joined = await MemberEvent.filter(invite_link=link, event_type="joined").count()
-    left = await MemberEvent.filter(invite_link=link, event_type="left").count()
-    pending = await JoinRequest.filter(invite_link=link, status="pending").count()
-    declined = await JoinRequest.filter(invite_link=link, status="declined").count()
-    current = joined - left
 
-    text = (
-        f"📊 <b>Tracking Statistics</b>\n\n"
-        f"🔗 Name: {link.name}\n"
-        f"URL: <code>{link.url}</code>\n\n"
-        f"⏳ Pending Requests: {pending}\n"
-        f"🚫 Declined: {declined}\n"
-        f"📥 Joined: {joined}\n"
-        f"📤 Left: {left}\n"
-        f"👤 Current: {current}"
-    )
+    if root:
+        left = await MemberEvent.filter(invite_link=link, event_type="left").count()
+        pending = await JoinRequest.filter(invite_link=link, status="pending").count()
+        declined = await JoinRequest.filter(invite_link=link, status="declined").count()
+        current = joined - left
+
+        text = (
+            f"📊 <b>Tracking Statistics</b>\n\n"
+            f"🔗 Name: {link.name}\n"
+            f"URL: <code>{link.url}</code>\n\n"
+            f"⏳ Pending Requests: {pending}\n"
+            f"🚫 Declined: {declined}\n"
+            f"📥 Joined: {joined}\n"
+            f"📤 Left: {left}\n"
+            f"👤 Current: {current}"
+        )
+    else:
+        text = (
+            f"📊 <b>Tracking Statistics</b>\n\n"
+            f"🔗 Name: {link.name}\n"
+            f"URL: <code>{link.url}</code>\n\n"
+            f"📥 Joined: {joined}"
+        )
 
     buttons = [
         [InlineKeyboardButton(text="🔄 Refresh", callback_data=f"stats_link:{link.id}")],

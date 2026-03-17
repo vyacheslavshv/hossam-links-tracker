@@ -40,6 +40,17 @@ class JoinRequest(Model):
         table = "join_requests"
 
 
+class ClientAdmin(Model):
+    id = fields.IntField(pk=True)
+    bot_id = fields.BigIntField(index=True)
+    user_id = fields.BigIntField()
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "client_admins"
+        unique_together = (("bot_id", "user_id"),)
+
+
 class MemberEvent(Model):
     id = fields.IntField(pk=True)
     bot_id = fields.BigIntField(index=True)
