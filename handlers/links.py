@@ -7,14 +7,10 @@ from aiogram.fsm.state import State, StatesGroup
 from .filters import IsAdmin, IsRootAdmin, is_root_admin
 from models import InviteLink, MemberEvent, JoinRequest
 
-router = Router()
-
-
 class LinkCreation(StatesGroup):
     waiting_name = State()
 
 
-@router.callback_query(F.data == "create_link", IsRootAdmin())
 async def cb_create_link(callback: CallbackQuery, state: FSMContext):
     await state.set_state(LinkCreation.waiting_name)
     await callback.message.edit_text(
@@ -27,7 +23,6 @@ async def cb_create_link(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(LinkCreation.waiting_name, IsRootAdmin())
 async def process_link_name(message: Message, state: FSMContext, bot_config: dict):
     name = message.text.strip() if message.text else ""
     if not name:
@@ -70,7 +65,6 @@ async def process_link_name(message: Message, state: FSMContext, bot_config: dic
     )
 
 
-@router.callback_query(F.data == "links_list", IsAdmin())
 async def cb_links_list(callback: CallbackQuery, bot_config: dict):
     root = is_root_admin(callback.from_user.id, bot_config)
     links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).order_by("-created_at")
@@ -107,7 +101,6 @@ async def cb_links_list(callback: CallbackQuery, bot_config: dict):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("link:"), IsAdmin())
 async def cb_link_detail(callback: CallbackQuery, bot_config: dict):
     root = is_root_admin(callback.from_user.id, bot_config)
     link_id = int(callback.data.split(":")[1])
@@ -161,7 +154,6 @@ async def cb_link_detail(callback: CallbackQuery, bot_config: dict):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("revoke:"), IsRootAdmin())
 async def cb_revoke_link(callback: CallbackQuery, bot_config: dict):
     link_id = int(callback.data.split(":")[1])
     link = await InviteLink.get_or_none(id=link_id, bot_id=bot_config["bot_id"])
@@ -189,3 +181,13 @@ async def cb_revoke_link(callback: CallbackQuery, bot_config: dict):
         ]),
     )
     await callback.answer()
+
+
+def create_router() -> Router:
+    router = Router()
+    router.callback_query.register(cb_create_link, F.data == "create_link", IsRootAdmin())
+    router.message.register(process_link_name, LinkCreation.waiting_name, IsRootAdmin())
+    router.callback_query.register(cb_links_list, F.data == "links_list", IsAdmin())
+    router.callback_query.register(cb_link_detail, F.data.startswith("link:"), IsAdmin())
+    router.callback_query.register(cb_revoke_link, F.data.startswith("revoke:"), IsRootAdmin())
+    return router

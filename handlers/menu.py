@@ -8,9 +8,6 @@ from config import BOT_PASSWORD
 from models import ClientAdmin
 from .filters import IsAdmin, is_root_admin
 
-router = Router()
-
-
 class Auth(StatesGroup):
     waiting_password = State()
 
@@ -38,7 +35,6 @@ def menu_text(bot_config: dict) -> str:
 
 # ── /start for admins ──
 
-@router.message(CommandStart(), IsAdmin())
 async def cmd_start(message: Message, state: FSMContext, bot_config: dict):
     await state.clear()
     root = is_root_admin(message.from_user.id, bot_config)
@@ -47,13 +43,11 @@ async def cmd_start(message: Message, state: FSMContext, bot_config: dict):
 
 # ── /start for unknown users → ask password ──
 
-@router.message(CommandStart())
 async def cmd_start_auth(message: Message, state: FSMContext):
     await state.set_state(Auth.waiting_password)
     await message.answer("🔐 Enter the access password:")
 
 
-@router.message(Auth.waiting_password)
 async def process_password(message: Message, state: FSMContext, bot_config: dict):
     if message.text and message.text.strip() == BOT_PASSWORD:
         await ClientAdmin.get_or_create(
@@ -71,7 +65,6 @@ async def process_password(message: Message, state: FSMContext, bot_config: dict
 
 # ── Menu callbacks ──
 
-@router.callback_query(F.data == "menu", IsAdmin())
 async def cb_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
     await state.clear()
     root = is_root_admin(callback.from_user.id, bot_config)
@@ -79,10 +72,19 @@ async def cb_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
     await callback.answer()
 
 
-@router.callback_query(F.data == "open_menu", IsAdmin())
 async def cb_open_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
     """Opens menu as a NEW message (so the notification/report stays visible)."""
     await state.clear()
     root = is_root_admin(callback.from_user.id, bot_config)
     await callback.message.answer(menu_text(bot_config), reply_markup=main_menu_kb(root))
     await callback.answer()
+
+
+def create_router() -> Router:
+    router = Router()
+    router.message.register(cmd_start, CommandStart(), IsAdmin())
+    router.message.register(cmd_start_auth, CommandStart())
+    router.message.register(process_password, Auth.waiting_password)
+    router.callback_query.register(cb_menu, F.data == "menu", IsAdmin())
+    router.callback_query.register(cb_open_menu, F.data == "open_menu", IsAdmin())
+    return router

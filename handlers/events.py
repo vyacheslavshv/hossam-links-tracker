@@ -12,9 +12,6 @@ from loguru import logger
 from .filters import IsRootAdmin
 from models import BotSettings, InviteLink, JoinRequest, MemberEvent
 
-router = Router()
-
-
 async def get_settings(bot_id: int) -> BotSettings:
     settings, _ = await BotSettings.get_or_create(bot_id=bot_id)
     return settings
@@ -106,7 +103,6 @@ def format_request_notification(user, chat, invite_url: str | None, timestamp: s
 
 # ── ChatJoinRequest handler ──
 
-@router.chat_join_request()
 async def on_join_request(event: ChatJoinRequest, bot_config: dict):
     bot_id = bot_config["bot_id"]
     user = event.from_user
@@ -169,7 +165,6 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
 
 # ── ChatMemberUpdated handler ──
 
-@router.chat_member()
 async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
     bot_id = bot_config["bot_id"]
     user = event.new_chat_member.user
@@ -237,7 +232,6 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
 
 # ── Approve / Decline callbacks ──
 
-@router.callback_query(F.data.startswith("req_approve:"), IsRootAdmin())
 async def cb_approve_request(callback: CallbackQuery, bot_config: dict):
     request_id = int(callback.data.split(":")[1])
     jr = await JoinRequest.get_or_none(id=request_id)
@@ -265,7 +259,6 @@ async def cb_approve_request(callback: CallbackQuery, bot_config: dict):
         await callback.answer(f"❌ Failed: {e}", show_alert=True)
 
 
-@router.callback_query(F.data.startswith("req_decline:"), IsRootAdmin())
 async def cb_decline_request(callback: CallbackQuery, bot_config: dict):
     request_id = int(callback.data.split(":")[1])
     jr = await JoinRequest.get_or_none(id=request_id)
@@ -291,3 +284,12 @@ async def cb_decline_request(callback: CallbackQuery, bot_config: dict):
     except Exception as e:
         logger.error(f"Failed to decline request {request_id}: {e}")
         await callback.answer(f"❌ Failed: {e}", show_alert=True)
+
+
+def create_router() -> Router:
+    router = Router()
+    router.chat_join_request.register(on_join_request)
+    router.chat_member.register(on_chat_member_update)
+    router.callback_query.register(cb_approve_request, F.data.startswith("req_approve:"), IsRootAdmin())
+    router.callback_query.register(cb_decline_request, F.data.startswith("req_decline:"), IsRootAdmin())
+    return router

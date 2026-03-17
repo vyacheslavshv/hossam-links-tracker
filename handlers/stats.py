@@ -8,10 +8,6 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from .filters import IsAdmin, is_root_admin
 from models import InviteLink, MemberEvent, JoinRequest
 
-router = Router()
-
-
-@router.callback_query(F.data == "stats", IsAdmin())
 async def cb_stats(callback: CallbackQuery, bot_config: dict):
     root = is_root_admin(callback.from_user.id, bot_config)
     bot_id = bot_config["bot_id"]
@@ -77,7 +73,6 @@ async def cb_stats(callback: CallbackQuery, bot_config: dict):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("stats_link:"), IsAdmin())
 async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
     root = is_root_admin(callback.from_user.id, bot_config)
     link_id = int(callback.data.split(":")[1])
@@ -127,3 +122,10 @@ async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
     except TelegramBadRequest:
         pass
     await callback.answer()
+
+
+def create_router() -> Router:
+    router = Router()
+    router.callback_query.register(cb_stats, F.data == "stats", IsAdmin())
+    router.callback_query.register(cb_stats_link, F.data.startswith("stats_link:"), IsAdmin())
+    return router

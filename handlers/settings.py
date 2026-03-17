@@ -4,9 +4,6 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardBut
 from .filters import IsRootAdmin
 from models import BotSettings, JoinRequest
 
-router = Router()
-
-
 async def get_settings(bot_id: int) -> BotSettings:
     settings, _ = await BotSettings.get_or_create(bot_id=bot_id)
     return settings
@@ -53,13 +50,11 @@ async def show_settings(callback: CallbackQuery, bot_config: dict):
     )
 
 
-@router.callback_query(F.data == "settings", IsRootAdmin())
 async def cb_settings(callback: CallbackQuery, bot_config: dict):
     await show_settings(callback, bot_config)
     await callback.answer()
 
 
-@router.callback_query(F.data == "toggle:auto_approve", IsRootAdmin())
 async def cb_toggle_auto_approve(callback: CallbackQuery, bot_config: dict):
     settings = await get_settings(bot_config["bot_id"])
     settings.auto_approve = not settings.auto_approve
@@ -70,7 +65,6 @@ async def cb_toggle_auto_approve(callback: CallbackQuery, bot_config: dict):
     await callback.answer(f"Auto-approve {status}")
 
 
-@router.callback_query(F.data == "toggle:notifications", IsRootAdmin())
 async def cb_toggle_notifications(callback: CallbackQuery, bot_config: dict):
     settings = await get_settings(bot_config["bot_id"])
     settings.notifications_enabled = not settings.notifications_enabled
@@ -81,7 +75,6 @@ async def cb_toggle_notifications(callback: CallbackQuery, bot_config: dict):
     await callback.answer(f"Notifications {status}")
 
 
-@router.callback_query(F.data == "clear_pending", IsRootAdmin())
 async def cb_clear_pending(callback: CallbackQuery, bot_config: dict):
     deleted = await JoinRequest.filter(
         bot_id=bot_config["bot_id"], status="pending"
@@ -95,3 +88,12 @@ async def cb_clear_pending(callback: CallbackQuery, bot_config: dict):
         await callback.answer("No pending requests to clear")
 
     await show_settings(callback, bot_config)
+
+
+def create_router() -> Router:
+    router = Router()
+    router.callback_query.register(cb_settings, F.data == "settings", IsRootAdmin())
+    router.callback_query.register(cb_toggle_auto_approve, F.data == "toggle:auto_approve", IsRootAdmin())
+    router.callback_query.register(cb_toggle_notifications, F.data == "toggle:notifications", IsRootAdmin())
+    router.callback_query.register(cb_clear_pending, F.data == "clear_pending", IsRootAdmin())
+    return router
