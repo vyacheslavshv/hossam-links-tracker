@@ -2,7 +2,8 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from .filters import IsRootAdmin
-from models import BotSettings, JoinRequest
+from models import BotSettings
+
 
 async def get_settings(bot_id: int) -> BotSettings:
     settings, _ = await BotSettings.get_or_create(bot_id=bot_id)
@@ -11,9 +12,6 @@ async def get_settings(bot_id: int) -> BotSettings:
 
 async def show_settings(callback: CallbackQuery, bot_config: dict):
     settings = await get_settings(bot_config["bot_id"])
-    pending_count = await JoinRequest.filter(
-        bot_id=bot_config["bot_id"], status="pending"
-    ).count()
 
     auto_icon = "✅" if settings.auto_approve else "❌"
     notif_icon = "✅" if settings.notifications_enabled else "❌"
@@ -23,8 +21,7 @@ async def show_settings(callback: CallbackQuery, bot_config: dict):
 
     text = (
         f"⚙️ <b>Settings</b>\n\n"
-        f"📢 Member Info Channel: {channel_display}\n"
-        f"⏳ Pending Requests: <b>{pending_count}</b>\n\n"
+        f"📢 Member Info Channel: {channel_display}\n\n"
         f"Toggle options:"
     )
 
@@ -36,10 +33,6 @@ async def show_settings(callback: CallbackQuery, bot_config: dict):
         [InlineKeyboardButton(
             text=f"{notif_icon} Notifications to channel",
             callback_data="toggle:notifications",
-        )],
-        [InlineKeyboardButton(
-            text=f"🗑 Clear Pending Requests ({pending_count})",
-            callback_data="clear_pending",
         )],
         [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
     ]
@@ -75,25 +68,9 @@ async def cb_toggle_notifications(callback: CallbackQuery, bot_config: dict):
     await callback.answer(f"Notifications {status}")
 
 
-async def cb_clear_pending(callback: CallbackQuery, bot_config: dict):
-    deleted = await JoinRequest.filter(
-        bot_id=bot_config["bot_id"], status="pending"
-    ).delete()
-
-    if deleted:
-        # Also try to decline them in Telegram
-        # (they may have already expired, so we just clear DB)
-        await callback.answer(f"🗑 Cleared {deleted} pending request(s)")
-    else:
-        await callback.answer("No pending requests to clear")
-
-    await show_settings(callback, bot_config)
-
-
 def create_router() -> Router:
     router = Router()
     router.callback_query.register(cb_settings, F.data == "settings", IsRootAdmin())
     router.callback_query.register(cb_toggle_auto_approve, F.data == "toggle:auto_approve", IsRootAdmin())
     router.callback_query.register(cb_toggle_notifications, F.data == "toggle:notifications", IsRootAdmin())
-    router.callback_query.register(cb_clear_pending, F.data == "clear_pending", IsRootAdmin())
     return router
