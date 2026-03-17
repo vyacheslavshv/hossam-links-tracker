@@ -1,15 +1,40 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message, CallbackQuery,
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton,
+)
 
 from config import BOT_PASSWORD
 from models import ClientAdmin
 from .filters import IsAdmin, is_root_admin
 
+
 class Auth(StatesGroup):
     waiting_password = State()
+
+
+async def refresh_channel_info(bot: Bot, bot_config: dict):
+    try:
+        chat = await bot.get_chat(bot_config["channel_id"])
+        bot_config["channel_title"] = chat.title
+        bot_config["channel_username"] = chat.username
+    except Exception:
+        pass
+
+
+def reply_kb(root: bool = True) -> ReplyKeyboardMarkup:
+    buttons = [
+        [KeyboardButton(text="📊 All Statistics")],
+    ]
+    if root:
+        buttons.append([KeyboardButton(text="🔗 Create Tracking Link")])
+    if root:
+        buttons.append([KeyboardButton(text="⚙️ Settings")])
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 
 def main_menu_kb(root: bool = True) -> InlineKeyboardMarkup:
@@ -18,7 +43,6 @@ def main_menu_kb(root: bool = True) -> InlineKeyboardMarkup:
     ]
     if root:
         buttons.append([InlineKeyboardButton(text="🔗 Create Tracking Link", callback_data="create_link")])
-    buttons.append([InlineKeyboardButton(text="📋 All Links", callback_data="links_list")])
     if root:
         buttons.append([InlineKeyboardButton(text="⚙️ Settings", callback_data="settings")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -37,8 +61,9 @@ def menu_text(bot_config: dict) -> str:
 
 async def cmd_start(message: Message, state: FSMContext, bot_config: dict):
     await state.clear()
+    await refresh_channel_info(message.bot, bot_config)
     root = is_root_admin(message.from_user.id, bot_config)
-    await message.answer(menu_text(bot_config), reply_markup=main_menu_kb(root))
+    await message.answer(menu_text(bot_config), reply_markup=reply_kb(root))
 
 
 # ── /start for unknown users → ask password ──
@@ -57,7 +82,7 @@ async def process_password(message: Message, state: FSMContext, bot_config: dict
         await state.clear()
         await message.answer(
             "✅ Access granted!\n\n" + menu_text(bot_config),
-            reply_markup=main_menu_kb(root=False),
+            reply_markup=reply_kb(root=False),
         )
     else:
         await message.answer("❌ Wrong password. Try again:")
@@ -67,6 +92,7 @@ async def process_password(message: Message, state: FSMContext, bot_config: dict
 
 async def cb_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
     await state.clear()
+    await refresh_channel_info(callback.bot, bot_config)
     root = is_root_admin(callback.from_user.id, bot_config)
     await callback.message.edit_text(menu_text(bot_config), reply_markup=main_menu_kb(root))
     await callback.answer()
@@ -75,6 +101,7 @@ async def cb_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
 async def cb_open_menu(callback: CallbackQuery, state: FSMContext, bot_config: dict):
     """Opens menu as a NEW message (so the notification/report stays visible)."""
     await state.clear()
+    await refresh_channel_info(callback.bot, bot_config)
     root = is_root_admin(callback.from_user.id, bot_config)
     await callback.message.answer(menu_text(bot_config), reply_markup=main_menu_kb(root))
     await callback.answer()

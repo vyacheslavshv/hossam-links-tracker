@@ -1,131 +1,103 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from .filters import IsAdmin, is_root_admin
 from models import InviteLink, MemberEvent, JoinRequest
 
-async def cb_stats(callback: CallbackQuery, bot_config: dict):
-    root = is_root_admin(callback.from_user.id, bot_config)
+
+async def build_stats(bot_config: dict, root: bool) -> tuple[str, InlineKeyboardMarkup]:
     bot_id = bot_config["bot_id"]
-    tz = ZoneInfo(bot_config.get("timezone", "Europe/Berlin"))
-
-    total_joined = await MemberEvent.filter(bot_id=bot_id, event_type="joined").count()
-
-    today = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
-    today_joined = await MemberEvent.filter(
-        bot_id=bot_id, event_type="joined", created_at__gte=today
-    ).count()
-
-    if root:
-        total_left = await MemberEvent.filter(bot_id=bot_id, event_type="left").count()
-        total_pending = await JoinRequest.filter(bot_id=bot_id, status="pending").count()
-        total_current = total_joined - total_left
-
-        today_left = await MemberEvent.filter(
-            bot_id=bot_id, event_type="left", created_at__gte=today
-        ).count()
-        net = today_joined - today_left
-
-        text = (
-            f"📊 <b>Overall Statistics</b>\n\n"
-            f"👤 Current Members: <b>{total_current}</b>\n"
-            f"Joined: {total_joined}\n"
-            f"Left: {total_left}\n"
-            f"Pending: {total_pending}\n\n"
-            f"📈 <b>Today:</b>\n"
-            f"   Joined: {today_joined}\n"
-            f"   Left: {today_left}\n"
-            f"   Net: {'+' if net >= 0 else ''}{net}"
-        )
-    else:
-        text = (
-            f"📊 <b>Overall Statistics</b>\n\n"
-            f"📥 Total Joined: <b>{total_joined}</b>\n\n"
-            f"📈 <b>Today:</b>\n"
-            f"   Joined: {today_joined}"
-        )
-
     links = await InviteLink.filter(bot_id=bot_id, revoked=False).order_by("-created_at")
 
-    buttons = []
+    if not links:
+        text = "📊 <b>Tracking Statistics</b>\n\nNo active links found."
+        buttons = [
+            [InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")],
+            [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
+        ]
+        return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    total_pending = 0
+    total_declined = 0
+    total_joined = 0
+    total_left = 0
+
+    parts = ["📊 <b>Tracking Statistics</b>"]
+
     for link in links:
         joined = await MemberEvent.filter(invite_link=link, event_type="joined").count()
-        left = await MemberEvent.filter(invite_link=link, event_type="left").count()
-        current = joined - left
-        buttons.append([InlineKeyboardButton(
-            text=f"🔗 {link.name} — 👤 {current}",
-            callback_data=f"stats_link:{link.id}",
-        )])
-    buttons.append([InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")])
-    buttons.append([InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")])
-
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        )
-    except TelegramBadRequest:
-        pass
-    await callback.answer()
-
-
-async def cb_stats_link(callback: CallbackQuery, bot_config: dict):
-    root = is_root_admin(callback.from_user.id, bot_config)
-    link_id = int(callback.data.split(":")[1])
-    link = await InviteLink.get_or_none(id=link_id, bot_id=bot_config["bot_id"])
-
-    if not link:
-        await callback.answer("❌ Link not found", show_alert=True)
-        return
-
-    joined = await MemberEvent.filter(invite_link=link, event_type="joined").count()
-
-    if root:
         left = await MemberEvent.filter(invite_link=link, event_type="left").count()
         pending = await JoinRequest.filter(invite_link=link, status="pending").count()
         declined = await JoinRequest.filter(invite_link=link, status="declined").count()
         current = joined - left
 
-        text = (
-            f"📊 <b>Tracking Statistics</b>\n\n"
-            f"🔗 Name: {link.name}\n"
-            f"URL: <code>{link.url}</code>\n\n"
-            f"⏳ Pending Requests: {pending}\n"
-            f"🚫 Declined: {declined}\n"
-            f"📥 Joined: {joined}\n"
-            f"📤 Left: {left}\n"
-            f"👤 Current: {current}"
+        total_joined += joined
+        total_left += left
+        total_pending += pending
+        total_declined += declined
+
+        if root:
+            parts.append(
+                f"\n🔗 Name: {link.name}\n"
+                f"🔗 URL: <code>{link.url}</code>\n"
+                f"⏳ Pending Requests: {pending}\n"
+                f"🚫 Declined: {declined}\n"
+                f"📥 Joined: {joined}\n"
+                f"📤 Left: {left}\n"
+                f"👤 Current: {current}"
+            )
+        else:
+            parts.append(
+                f"\n🔗 Name: {link.name}\n"
+                f"📥 Joined: {joined}"
+            )
+
+    total_current = total_joined - total_left
+
+    if root:
+        parts.append(
+            f"\n───────────────\n"
+            f"📈 <b>Overall Statistics:</b>\n"
+            f"⏳ Total Pending: {total_pending}\n"
+            f"🚫 Total Declined: {total_declined}\n"
+            f"📥 Total Joins: {total_joined}\n"
+            f"📤 Total Leaves: {total_left}\n"
+            f"👤 Currently tracked: {total_current}"
         )
     else:
-        text = (
-            f"📊 <b>Tracking Statistics</b>\n\n"
-            f"🔗 Name: {link.name}\n"
-            f"URL: <code>{link.url}</code>\n\n"
-            f"📥 Joined: {joined}"
+        parts.append(
+            f"\n───────────────\n"
+            f"📈 <b>Overall:</b>\n"
+            f"📥 Total Joins: {total_joined}"
         )
 
+    text = "\n".join(parts)
     buttons = [
-        [InlineKeyboardButton(text="🔄 Refresh", callback_data=f"stats_link:{link.id}")],
-        [InlineKeyboardButton(text="📊 All Stats", callback_data="stats")],
+        [InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")],
         [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
     ]
+    return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+async def cb_stats(callback: CallbackQuery, bot_config: dict):
+    root = is_root_admin(callback.from_user.id, bot_config)
+    text, markup = await build_stats(bot_config, root)
     try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        )
+        await callback.message.edit_text(text, reply_markup=markup)
     except TelegramBadRequest:
         pass
     await callback.answer()
 
 
+async def msg_stats(message: Message, bot_config: dict):
+    root = is_root_admin(message.from_user.id, bot_config)
+    text, markup = await build_stats(bot_config, root)
+    await message.answer(text, reply_markup=markup)
+
+
 def create_router() -> Router:
     router = Router()
     router.callback_query.register(cb_stats, F.data == "stats", IsAdmin())
-    router.callback_query.register(cb_stats_link, F.data.startswith("stats_link:"), IsAdmin())
+    router.message.register(msg_stats, F.text == "📊 All Statistics", IsAdmin())
     return router

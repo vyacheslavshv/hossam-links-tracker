@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from .filters import IsRootAdmin
 from models import BotSettings
@@ -10,9 +10,7 @@ async def get_settings(bot_id: int) -> BotSettings:
     return settings
 
 
-async def show_settings(callback: CallbackQuery, bot_config: dict):
-    settings = await get_settings(bot_config["bot_id"])
-
+def build_settings_content(settings: BotSettings, bot_config: dict) -> tuple[str, InlineKeyboardMarkup]:
     auto_icon = "✅" if settings.auto_approve else "❌"
     notif_icon = "✅" if settings.notifications_enabled else "❌"
 
@@ -37,15 +35,20 @@ async def show_settings(callback: CallbackQuery, bot_config: dict):
         [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
     ]
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
+    return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 async def cb_settings(callback: CallbackQuery, bot_config: dict):
-    await show_settings(callback, bot_config)
+    settings = await get_settings(bot_config["bot_id"])
+    text, markup = build_settings_content(settings, bot_config)
+    await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer()
+
+
+async def msg_settings(message: Message, bot_config: dict):
+    settings = await get_settings(bot_config["bot_id"])
+    text, markup = build_settings_content(settings, bot_config)
+    await message.answer(text, reply_markup=markup)
 
 
 async def cb_toggle_auto_approve(callback: CallbackQuery, bot_config: dict):
@@ -54,7 +57,8 @@ async def cb_toggle_auto_approve(callback: CallbackQuery, bot_config: dict):
     await settings.save()
 
     status = "enabled ✅" if settings.auto_approve else "disabled ❌"
-    await show_settings(callback, bot_config)
+    text, markup = build_settings_content(settings, bot_config)
+    await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer(f"Auto-approve {status}")
 
 
@@ -64,13 +68,15 @@ async def cb_toggle_notifications(callback: CallbackQuery, bot_config: dict):
     await settings.save()
 
     status = "enabled ✅" if settings.notifications_enabled else "disabled ❌"
-    await show_settings(callback, bot_config)
+    text, markup = build_settings_content(settings, bot_config)
+    await callback.message.edit_text(text, reply_markup=markup)
     await callback.answer(f"Notifications {status}")
 
 
 def create_router() -> Router:
     router = Router()
     router.callback_query.register(cb_settings, F.data == "settings", IsRootAdmin())
+    router.message.register(msg_settings, F.text == "⚙️ Settings", IsRootAdmin())
     router.callback_query.register(cb_toggle_auto_approve, F.data == "toggle:auto_approve", IsRootAdmin())
     router.callback_query.register(cb_toggle_notifications, F.data == "toggle:notifications", IsRootAdmin())
     return router

@@ -1,11 +1,11 @@
 from aiogram import Router, F, Bot
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from .filters import IsAdmin, IsRootAdmin, is_root_admin
-from models import InviteLink, MemberEvent, JoinRequest
+from .filters import IsRootAdmin
+from models import InviteLink
+
 
 class LinkCreation(StatesGroup):
     waiting_name = State()
@@ -21,6 +21,17 @@ async def cb_create_link(callback: CallbackQuery, state: FSMContext):
         ]),
     )
     await callback.answer()
+
+
+async def msg_create_link(message: Message, state: FSMContext):
+    await state.set_state(LinkCreation.waiting_name)
+    await message.answer(
+        "🔗 <b>Create Invite Link</b>\n\n"
+        "Send me the name for this link:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancel", callback_data="menu")]
+        ]),
+    )
 
 
 async def process_link_name(message: Message, state: FSMContext, bot_config: dict):
@@ -65,129 +76,9 @@ async def process_link_name(message: Message, state: FSMContext, bot_config: dic
     )
 
 
-async def cb_links_list(callback: CallbackQuery, bot_config: dict):
-    root = is_root_admin(callback.from_user.id, bot_config)
-    links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).order_by("-created_at")
-
-    if not links:
-        buttons = []
-        if root:
-            buttons.append([InlineKeyboardButton(text="🔗 Create Link", callback_data="create_link")])
-        buttons.append([InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")])
-        await callback.message.edit_text(
-            "📋 <b>Links</b>\n\nNo active links found.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        )
-        await callback.answer()
-        return
-
-    buttons = []
-    for link in links:
-        joined = await MemberEvent.filter(invite_link=link, event_type="joined").count()
-        left = await MemberEvent.filter(invite_link=link, event_type="left").count()
-        current = joined - left
-        buttons.append([InlineKeyboardButton(
-            text=f"{link.name} — 👤 {current}",
-            callback_data=f"link:{link.id}",
-        )])
-    if root:
-        buttons.append([InlineKeyboardButton(text="🔗 Create Link", callback_data="create_link")])
-    buttons.append([InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")])
-
-    await callback.message.edit_text(
-        "📋 <b>All Links</b>\n\nSelect a link to manage:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
-    await callback.answer()
-
-
-async def cb_link_detail(callback: CallbackQuery, bot_config: dict):
-    root = is_root_admin(callback.from_user.id, bot_config)
-    link_id = int(callback.data.split(":")[1])
-    link = await InviteLink.get_or_none(id=link_id, bot_id=bot_config["bot_id"])
-
-    if not link:
-        await callback.answer("❌ Link not found", show_alert=True)
-        return
-
-    joined = await MemberEvent.filter(invite_link=link, event_type="joined").count()
-
-    text = (
-        f"📊 <b>Tracking Statistics</b>\n\n"
-        f"🔗 Name: {link.name}\n"
-        f"URL: <code>{link.url}</code>\n\n"
-        f"📥 Joined: {joined}"
-    )
-
-    if root:
-        left = await MemberEvent.filter(invite_link=link, event_type="left").count()
-        pending = await JoinRequest.filter(invite_link=link, status="pending").count()
-        declined = await JoinRequest.filter(invite_link=link, status="declined").count()
-        current = joined - left
-
-        text = (
-            f"📊 <b>Tracking Statistics</b>\n\n"
-            f"🔗 Name: {link.name}\n"
-            f"URL: <code>{link.url}</code>\n\n"
-            f"⏳ Pending Requests: {pending}\n"
-            f"🚫 Declined: {declined}\n"
-            f"📥 Joined: {joined}\n"
-            f"📤 Left: {left}\n"
-            f"👤 Current: {current}"
-        )
-
-    buttons = [
-        [InlineKeyboardButton(text="🔄 Refresh", callback_data=f"link:{link.id}")],
-    ]
-    if root:
-        buttons.append([InlineKeyboardButton(text="🗑 Revoke Link", callback_data=f"revoke:{link.id}")])
-    buttons.append([InlineKeyboardButton(text="📋 All Links", callback_data="links_list")])
-    buttons.append([InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")])
-
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        )
-    except TelegramBadRequest:
-        pass
-    await callback.answer()
-
-
-async def cb_revoke_link(callback: CallbackQuery, bot_config: dict):
-    link_id = int(callback.data.split(":")[1])
-    link = await InviteLink.get_or_none(id=link_id, bot_id=bot_config["bot_id"])
-
-    if not link:
-        await callback.answer("❌ Link not found", show_alert=True)
-        return
-
-    try:
-        await callback.bot.revoke_chat_invite_link(
-            chat_id=bot_config["channel_id"],
-            invite_link=link.url,
-        )
-    except Exception:
-        pass
-
-    link.revoked = True
-    await link.save()
-
-    await callback.message.edit_text(
-        f"✅ Link <b>{link.name}</b> has been revoked.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📋 All Links", callback_data="links_list")],
-            [InlineKeyboardButton(text="🔙 Main Menu", callback_data="menu")],
-        ]),
-    )
-    await callback.answer()
-
-
 def create_router() -> Router:
     router = Router()
     router.callback_query.register(cb_create_link, F.data == "create_link", IsRootAdmin())
+    router.message.register(msg_create_link, F.text == "🔗 Create Tracking Link", IsRootAdmin())
     router.message.register(process_link_name, LinkCreation.waiting_name, IsRootAdmin())
-    router.callback_query.register(cb_links_list, F.data == "links_list", IsAdmin())
-    router.callback_query.register(cb_link_detail, F.data.startswith("link:"), IsAdmin())
-    router.callback_query.register(cb_revoke_link, F.data.startswith("revoke:"), IsRootAdmin())
     return router
