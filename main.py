@@ -12,7 +12,7 @@ from handlers import create_router
 from scheduler import scheduler_loop
 
 
-async def run_bot(bot_config: dict, dispatchers: list):
+async def run_bot(bot_config: dict):
     bot = Bot(
         token=bot_config["bot_token"],
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -34,7 +34,6 @@ async def run_bot(bot_config: dict, dispatchers: list):
     dp = Dispatcher()
     dp["bot_config"] = bot_config
     dp.include_router(create_router())
-    dispatchers.append(dp)
 
     logger.info(
         f"Bot @{me.username} (ID: {me.id}) started "
@@ -56,6 +55,10 @@ async def run_bot(bot_config: dict, dispatchers: list):
         )
     finally:
         scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
         await bot.session.close()
 
 
@@ -71,26 +74,31 @@ async def main():
 
     logger.info(f"Starting {len(bots_config)} bot(s)...")
 
-    dispatchers = []
     shutdown_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
     def handle_signal():
         if not shutdown_event.is_set():
-            logger.info("Shutdown signal received, stopping bots gracefully...")
+            logger.info("Shutdown signal received, stopping bots...")
             shutdown_event.set()
 
     loop.add_signal_handler(signal.SIGINT, handle_signal)
     loop.add_signal_handler(signal.SIGTERM, handle_signal)
 
-    tasks = [asyncio.create_task(run_bot(cfg, dispatchers)) for cfg in bots_config]
+    tasks = [asyncio.create_task(run_bot(cfg)) for cfg in bots_config]
 
     await shutdown_event.wait()
 
-    for dp in dispatchers:
-        await dp.stop_polling()
+    for task in tasks:
+        task.cancel()
 
-    await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=10,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Shutdown timed out after 10s, forcing exit")
 
     await close_db()
     logger.info("All bots stopped")
