@@ -188,46 +188,46 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
             if recent_jr and recent_jr.invite_link_id:
                 db_link = await InviteLink.get_or_none(id=recent_jr.invite_link_id)
 
-        await MemberEvent.create(
-            bot_id=bot_id,
-            invite_link=db_link,
-            user_id=user.id,
-            username=user.username,
-            full_name=user.full_name,
-            language=user.language_code,
-            is_bot=user.is_bot,
-            is_premium=user.is_premium or False,
-            event_type="joined",
-        )
-
-        text = format_join_notification(user, chat, invite_url or (db_link.url if db_link else None), timestamp)
-        await send_notification(event.bot, bot_config, text)
-
-        logger.info(f"[{bot_id}] User {user.id} ({user.full_name}) joined")
+        if db_link:
+            await MemberEvent.create(
+                bot_id=bot_id,
+                invite_link=db_link,
+                user_id=user.id,
+                username=user.username,
+                full_name=user.full_name,
+                language=user.language_code,
+                is_bot=user.is_bot,
+                is_premium=user.is_premium or False,
+                event_type="joined",
+            )
+            text = format_join_notification(user, chat, db_link.url, timestamp)
+            await send_notification(event.bot, bot_config, text)
+            logger.info(f"[{bot_id}] User {user.id} ({user.full_name}) joined via tracked link")
 
     # ── User left ──
     elif old_status in ("member", "administrator", "restricted") and new_status in ("left", "kicked"):
-        # Find original invite link from join event
-        original_link = None
+        # Find original tracked join event for this user
         join_event = await MemberEvent.filter(
             bot_id=bot_id, user_id=user.id, event_type="joined"
         ).order_by("-created_at").first()
-        if join_event and join_event.invite_link_id:
-            original_link = await InviteLink.get_or_none(id=join_event.invite_link_id)
 
-        await MemberEvent.create(
-            bot_id=bot_id,
-            invite_link=original_link,
-            user_id=user.id,
-            username=user.username,
-            full_name=user.full_name,
-            language=user.language_code,
-            is_bot=user.is_bot,
-            is_premium=user.is_premium or False,
-            event_type="left",
-        )
+        if join_event:
+            original_link = None
+            if join_event.invite_link_id:
+                original_link = await InviteLink.get_or_none(id=join_event.invite_link_id)
 
-        logger.info(f"[{bot_id}] User {user.id} ({user.full_name}) left")
+            await MemberEvent.create(
+                bot_id=bot_id,
+                invite_link=original_link,
+                user_id=user.id,
+                username=user.username,
+                full_name=user.full_name,
+                language=user.language_code,
+                is_bot=user.is_bot,
+                is_premium=user.is_premium or False,
+                event_type="left",
+            )
+            logger.info(f"[{bot_id}] User {user.id} ({user.full_name}) left")
 
 
 # ── Approve / Decline callbacks ──
