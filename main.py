@@ -1,4 +1,5 @@
 import asyncio
+import signal
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -11,7 +12,7 @@ from handlers import create_router
 from scheduler import scheduler_loop
 
 
-async def run_bot(bot_config: dict):
+async def run_bot(bot_config: dict, dispatchers: list):
     bot = Bot(
         token=bot_config["bot_token"],
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -33,6 +34,7 @@ async def run_bot(bot_config: dict):
     dp = Dispatcher()
     dp["bot_config"] = bot_config
     dp.include_router(create_router())
+    dispatchers.append(dp)
 
     logger.info(
         f"Bot @{me.username} (ID: {me.id}) started "
@@ -69,15 +71,29 @@ async def main():
 
     logger.info(f"Starting {len(bots_config)} bot(s)...")
 
-    tasks = [asyncio.create_task(run_bot(cfg)) for cfg in bots_config]
+    dispatchers = []
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
 
-    try:
-        await asyncio.gather(*tasks)
-    finally:
-        for task in tasks:
-            task.cancel()
-        await close_db()
-        logger.info("All bots stopped")
+    def handle_signal():
+        if not shutdown_event.is_set():
+            logger.info("Shutdown signal received, stopping bots gracefully...")
+            shutdown_event.set()
+
+    loop.add_signal_handler(signal.SIGINT, handle_signal)
+    loop.add_signal_handler(signal.SIGTERM, handle_signal)
+
+    tasks = [asyncio.create_task(run_bot(cfg, dispatchers)) for cfg in bots_config]
+
+    await shutdown_event.wait()
+
+    for dp in dispatchers:
+        await dp.stop_polling()
+
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+    await close_db()
+    logger.info("All bots stopped")
 
 
 if __name__ == "__main__":
