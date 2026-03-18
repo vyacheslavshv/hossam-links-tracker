@@ -12,30 +12,33 @@ async def send_daily_report(bot: Bot, bot_config: dict):
     bot_id = bot_config["bot_id"]
     tz = ZoneInfo(bot_config.get("timezone", "Europe/Berlin"))
     now = datetime.now(tz)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_end = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     links = await InviteLink.filter(bot_id=bot_id, revoked=False).order_by("-created_at")
 
     total_joined = 0
     total_left = 0
-    today_joined = 0
-    today_left = 0
+    day_joined = 0
+    day_left = 0
 
     links_text = ""
     for link in links:
         lj = await MemberEvent.filter(invite_link=link, event_type="joined").count()
         ll = await MemberEvent.filter(invite_link=link, event_type="left").count()
         tj = await MemberEvent.filter(
-            invite_link=link, event_type="joined", created_at__gte=today_start
+            invite_link=link, event_type="joined",
+            created_at__gte=yesterday_start, created_at__lt=yesterday_end,
         ).count()
         tl = await MemberEvent.filter(
-            invite_link=link, event_type="left", created_at__gte=today_start
+            invite_link=link, event_type="left",
+            created_at__gte=yesterday_start, created_at__lt=yesterday_end,
         ).count()
 
         total_joined += lj
         total_left += ll
-        today_joined += tj
-        today_left += tl
+        day_joined += tj
+        day_left += tl
 
         links_text += f"   🔗 {link.name} — 👤 {lj - ll}\n"
 
@@ -43,16 +46,17 @@ async def send_daily_report(bot: Bot, bot_config: dict):
         links_text = "   No active links\n"
 
     total_current = total_joined - total_left
-    net = today_joined - today_left
+    net = day_joined - day_left
+    report_date = yesterday_start.strftime('%Y-%m-%d')
 
     channel_title = bot_config.get("channel_title", "Unknown")
 
     text = (
-        f"📊 <b>Daily Report — {now.strftime('%Y-%m-%d')}</b>\n\n"
+        f"📊 <b>Daily Report — {report_date}</b>\n\n"
         f"📢 Channel: {channel_title}\n\n"
-        f"📈 <b>Today's Activity:</b>\n"
-        f"   New Joins: {today_joined}\n"
-        f"   Leaves: {today_left}\n"
+        f"📈 <b>Day Activity:</b>\n"
+        f"   New Joins: {day_joined}\n"
+        f"   Leaves: {day_left}\n"
         f"   Net Growth: {'+' if net >= 0 else ''}{net}\n\n"
         f"📋 <b>Links Overview:</b>\n"
         f"{links_text}\n"
