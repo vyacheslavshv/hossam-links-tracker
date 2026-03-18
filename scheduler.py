@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from aiogram import Bot
 from loguru import logger
 
-from models import InviteLink, MemberEvent, JoinRequest
+from models import InviteLink, MemberEvent
 
 
 async def send_daily_report(bot: Bot, bot_config: dict):
@@ -14,28 +14,36 @@ async def send_daily_report(bot: Bot, bot_config: dict):
     now = datetime.now(tz)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    total_joined = await MemberEvent.filter(bot_id=bot_id, event_type="joined").count()
-    total_left = await MemberEvent.filter(bot_id=bot_id, event_type="left").count()
-    total_current = total_joined - total_left
-
-    today_joined = await MemberEvent.filter(
-        bot_id=bot_id, event_type="joined", created_at__gte=today_start
-    ).count()
-    today_left = await MemberEvent.filter(
-        bot_id=bot_id, event_type="left", created_at__gte=today_start
-    ).count()
-    net = today_joined - today_left
-
     links = await InviteLink.filter(bot_id=bot_id, revoked=False).order_by("-created_at")
+
+    total_joined = 0
+    total_left = 0
+    today_joined = 0
+    today_left = 0
 
     links_text = ""
     for link in links:
         lj = await MemberEvent.filter(invite_link=link, event_type="joined").count()
         ll = await MemberEvent.filter(invite_link=link, event_type="left").count()
+        tj = await MemberEvent.filter(
+            invite_link=link, event_type="joined", created_at__gte=today_start
+        ).count()
+        tl = await MemberEvent.filter(
+            invite_link=link, event_type="left", created_at__gte=today_start
+        ).count()
+
+        total_joined += lj
+        total_left += ll
+        today_joined += tj
+        today_left += tl
+
         links_text += f"   🔗 {link.name} — 👤 {lj - ll}\n"
 
     if not links_text:
         links_text = "   No active links\n"
+
+    total_current = total_joined - total_left
+    net = today_joined - today_left
 
     channel_title = bot_config.get("channel_title", "Unknown")
 

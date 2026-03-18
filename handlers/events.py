@@ -169,6 +169,11 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
             if recent_jr and recent_jr.invite_link_id:
                 db_link = await InviteLink.get_or_none(id=recent_jr.invite_link_id)
 
+        # Mark pending join requests as approved
+        await JoinRequest.filter(
+            bot_id=bot_id, user_id=user.id, status="pending"
+        ).update(status="approved")
+
         if db_link:
             await MemberEvent.create(
                 bot_id=bot_id,
