@@ -1,9 +1,8 @@
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
-from loguru import logger
 
-from .filters import IsAdmin, IsRootAdmin, is_root_admin
+from .filters import IsAdmin, is_root_admin
 from models import InviteLink, MemberEvent, JoinRequest
 
 
@@ -24,7 +23,6 @@ async def build_stats(bot_config: dict, root: bool) -> tuple[str, InlineKeyboard
     total_left = 0
 
     parts = ["📊 <b>Tracking Statistics</b>"]
-    delete_buttons = []
 
     for link in links:
         joined = await MemberEvent.filter(invite_link=link, event_type="joined").count()
@@ -47,12 +45,6 @@ async def build_stats(bot_config: dict, root: bool) -> tuple[str, InlineKeyboard
                 f"📥 Joined: {joined}\n"
                 f"📤 Left: {left}\n"
                 f"👤 Current: {current}"
-            )
-            delete_buttons.append(
-                [InlineKeyboardButton(
-                    text=f"🗑 Delete: {link.name}",
-                    callback_data=f"del_link:{link.id}",
-                )]
             )
         else:
             parts.append(
@@ -80,7 +72,7 @@ async def build_stats(bot_config: dict, root: bool) -> tuple[str, InlineKeyboard
         )
 
     text = "\n".join(parts)
-    buttons = delete_buttons + [
+    buttons = [
         [InlineKeyboardButton(text="🔄 Refresh", callback_data="stats")],
     ]
     return text, InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -102,39 +94,8 @@ async def msg_stats(message: Message, bot_config: dict):
     await message.answer(text, reply_markup=markup)
 
 
-async def cb_delete_link(callback: CallbackQuery, bot_config: dict):
-    link_id = int(callback.data.split(":")[1])
-    link = await InviteLink.get_or_none(id=link_id, bot_id=bot_config["bot_id"])
-
-    if not link:
-        await callback.answer("❌ Link not found", show_alert=True)
-        return
-
-    try:
-        await callback.bot.revoke_chat_invite_link(
-            chat_id=bot_config["channel_id"],
-            invite_link=link.url,
-        )
-    except Exception as e:
-        logger.warning(f"Could not revoke link in Telegram: {e}")
-
-    link.revoked = True
-    await link.save()
-
-    await callback.answer(f"🗑 Link \"{link.name}\" deleted")
-
-    # Refresh stats
-    root = is_root_admin(callback.from_user.id, bot_config)
-    text, markup = await build_stats(bot_config, root)
-    try:
-        await callback.message.edit_text(text, reply_markup=markup)
-    except TelegramBadRequest:
-        pass
-
-
 def create_router() -> Router:
     router = Router()
     router.callback_query.register(cb_stats, F.data == "stats", IsAdmin())
-    router.callback_query.register(cb_delete_link, F.data.startswith("del_link:"), IsRootAdmin())
     router.message.register(msg_stats, F.text == "📊 All Statistics", IsAdmin())
     return router
