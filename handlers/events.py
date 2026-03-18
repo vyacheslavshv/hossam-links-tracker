@@ -132,7 +132,7 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
         )
         # ChatMemberUpdated will handle the "joined" event and notification
     else:
-        jr = await JoinRequest.create(
+        await JoinRequest.create(
             bot_id=bot_id,
             invite_link=db_link,
             user_id=user.id,
@@ -140,25 +140,6 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
             full_name=user.full_name,
             status="pending",
         )
-
-        text = format_request_notification(user, chat, invite_url, timestamp)
-        buttons = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Approve", callback_data=f"req_approve:{jr.id}"),
-                InlineKeyboardButton(text="❌ Decline", callback_data=f"req_decline:{jr.id}"),
-            ]
-        ])
-
-        # Send to admins in DM with approve/decline buttons
-        for admin_id in bot_config.get("admin_ids", []):
-            try:
-                await event.bot.send_message(
-                    chat_id=admin_id,
-                    text=text,
-                    reply_markup=buttons,
-                )
-            except Exception:
-                pass
 
     logger.info(f"[{bot_id}] Join request from {user.id} ({user.full_name})")
 
