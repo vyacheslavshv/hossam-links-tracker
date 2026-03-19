@@ -113,11 +113,6 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
     invite_url = event.invite_link.invite_link if event.invite_link else None
     db_link = await find_invite_link(bot_id, invite_url)
 
-    logger.info(
-        f"[{bot_id}] JOIN REQUEST: user={user.id} ({user.full_name}), "
-        f"invite_link={invite_url}, db_link={'found' if db_link else 'NOT found'}"
-    )
-
     tz = ZoneInfo(bot_config.get("timezone", "Europe/Berlin"))
     timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -168,18 +163,6 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
 
     # ── User joined ──
     if old_status in ("left", "kicked") and new_status in ("member", "administrator"):
-        logger.info(
-            f"[{bot_id}] JOIN event: user={user.id} ({user.full_name}), "
-            f"invite_link={invite_url}, db_link={'found' if db_link else 'NOT found'}"
-        )
-
-        # Try to find link from recent join request if not on the event
-        if not db_link:
-            recent_jr = await JoinRequest.filter(
-                bot_id=bot_id, user_id=user.id
-            ).order_by("-created_at").first()
-            if recent_jr and recent_jr.invite_link_id:
-                db_link = await InviteLink.get_or_none(id=recent_jr.invite_link_id)
 
         # Mark pending join requests as approved
         await JoinRequest.filter(
