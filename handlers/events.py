@@ -42,11 +42,12 @@ async def send_notification(bot: Bot, bot_config: dict, text: str, reply_markup=
         logger.error(f"Failed to send notification: {e}")
 
 
-def format_join_notification(user, chat, invite_url: str | None, timestamp: str) -> str:
+def format_join_notification(user, chat, invite_url: str | None, link_name: str | None, timestamp: str) -> str:
     name = html.escape(user.full_name)
     username = f"@{user.username}" if user.username else "N/A"
     channel_username = f"@{chat.username}" if chat.username else "N/A"
     link_display = f"<code>{html.escape(invite_url)}</code>" if invite_url else "N/A"
+    name_display = html.escape(link_name) if link_name else "N/A"
 
     return (
         f"👤 <b>New Member Joined</b>\n\n"
@@ -59,6 +60,7 @@ def format_join_notification(user, chat, invite_url: str | None, timestamp: str)
         f"📢 Channel: {html.escape(chat.title or 'Unknown')}\n"
         f"Channel ID: <code>{chat.id}</code>\n"
         f"Channel Username: {channel_username}\n"
+        f"Link Name: {name_display}\n"
         f"Invite Link: {link_display}\n\n"
         f"🕐 Joined: {timestamp}"
     )
@@ -111,6 +113,11 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
     invite_url = event.invite_link.invite_link if event.invite_link else None
     db_link = await find_invite_link(bot_id, invite_url)
 
+    logger.info(
+        f"[{bot_id}] JOIN REQUEST: user={user.id} ({user.full_name}), "
+        f"invite_link={invite_url}, db_link={'found' if db_link else 'NOT found'}"
+    )
+
     tz = ZoneInfo(bot_config.get("timezone", "Europe/Berlin"))
     timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -161,6 +168,11 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
 
     # ── User joined ──
     if old_status in ("left", "kicked") and new_status in ("member", "administrator"):
+        logger.info(
+            f"[{bot_id}] JOIN event: user={user.id} ({user.full_name}), "
+            f"invite_link={invite_url}, db_link={'found' if db_link else 'NOT found'}"
+        )
+
         # Try to find link from recent join request if not on the event
         if not db_link:
             recent_jr = await JoinRequest.filter(
@@ -186,7 +198,7 @@ async def on_chat_member_update(event: ChatMemberUpdated, bot_config: dict):
                 is_premium=user.is_premium or False,
                 event_type="joined",
             )
-            text = format_join_notification(user, chat, db_link.url, timestamp)
+            text = format_join_notification(user, chat, db_link.url, db_link.name, timestamp)
             await send_notification(event.bot, bot_config, text)
             logger.info(f"[{bot_id}] User {user.id} ({user.full_name}) joined via tracked link")
 
