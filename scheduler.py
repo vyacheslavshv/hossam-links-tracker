@@ -40,7 +40,7 @@ async def send_daily_report(bot: Bot, bot_config: dict):
         day_joined += tj
         day_left += tl
 
-        links_text += f"   🔗 {link.name} — 👤 {lj - ll}\n"
+        links_text += f"   🔗 {link.name} — 📥 {tj} new joins\n"
 
     if not links_text:
         links_text = "   No active links\n"
