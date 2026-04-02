@@ -77,7 +77,10 @@ def create_master_router(manager: BotManager) -> Router:
         if not _is_admin(callback.from_user.id):
             return await callback.answer("⛔️", show_alert=True)
         await state.clear()
-        await _send_main_menu(callback, manager)
+        try:
+            await _send_main_menu(callback, manager)
+        except Exception:
+            pass
         await callback.answer()
 
     # ── Add bot flow ─────────────────────────────────────────
@@ -181,9 +184,15 @@ def create_master_router(manager: BotManager) -> Router:
             },
         )
 
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Add Bot", callback_data="master:add")],
+            [InlineKeyboardButton(text="🗑 Remove Bot", callback_data="master:remove_list")],
+            [InlineKeyboardButton(text="🔄 Refresh", callback_data="master:refresh")],
+        ])
         await message.answer(
             f"✅ Bot <b>@{bot_config['bot_username']}</b> started!\n"
-            f"Channel: {bot_config.get('channel_title', 'Unknown')}"
+            f"Channel: {bot_config.get('channel_title', 'Unknown')}",
+            reply_markup=keyboard,
         )
 
     # ── Remove bot flow ──────────────────────────────────────
@@ -252,10 +261,18 @@ def create_master_router(manager: BotManager) -> Router:
         if token:
             await BotConfig.filter(bot_token=token).update(is_active=False)
 
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Add Bot", callback_data="master:add")],
+            [InlineKeyboardButton(text="🗑 Remove Bot", callback_data="master:remove_list")],
+            [InlineKeyboardButton(text="🔄 Refresh", callback_data="master:refresh")],
+        ])
         if stopped:
-            await callback.message.edit_text(f"✅ Bot <b>@{username}</b> removed and stopped.")
+            await callback.message.edit_text(
+                f"✅ Bot <b>@{username}</b> removed and stopped.",
+                reply_markup=keyboard,
+            )
         else:
-            await callback.message.edit_text("⚠️ Bot was not running.")
+            await callback.message.edit_text("⚠️ Bot was not running.", reply_markup=keyboard)
         await callback.answer()
 
     # ── Cancel ───────────────────────────────────────────────
