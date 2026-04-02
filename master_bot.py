@@ -19,7 +19,7 @@ from aiogram.types import (
 from loguru import logger
 
 from bot_manager import BotManager
-from config import ADMIN_IDS
+from config import ADMIN_IDS, DEFAULT_NOTIFICATION_CHANNEL_ID
 from models import BotConfig
 
 
@@ -126,11 +126,11 @@ def create_master_router(manager: BotManager) -> Router:
         await state.update_data(channel_id=channel_id)
         await state.set_state(AddBot.notification_channel_id)
         skip_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⏭ Skip (same as channel)", callback_data="master:skip_notif")],
+            [InlineKeyboardButton(text="⏭ Skip (default channel)", callback_data="master:skip_notif")],
             [InlineKeyboardButton(text="❌ Cancel", callback_data="master:cancel")],
         ])
         await message.answer(
-            "Send the <b>notification channel ID</b>, or skip to use the same channel:",
+            "Send the <b>notification channel ID</b>, or skip to use the default channel:",
             reply_markup=skip_kb,
         )
 
@@ -142,7 +142,7 @@ def create_master_router(manager: BotManager) -> Router:
         await state.clear()
         await callback.message.edit_text("⏳ Starting bot...")
         await callback.answer()
-        await _finish_add_bot(callback.message, manager, data["token"], data["channel_id"], None)
+        await _finish_add_bot(callback.message, manager, data["token"], data["channel_id"], DEFAULT_NOTIFICATION_CHANNEL_ID)
 
     @router.message(AddBot.notification_channel_id)
     async def on_notification_channel_id(message: Message, state: FSMContext):

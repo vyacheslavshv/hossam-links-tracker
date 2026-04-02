@@ -9,6 +9,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite://data/db.sqlite3")
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Berlin")
 BOT_PASSWORD = os.getenv("BOT_PASSWORD", "Nomad1234")
 MASTER_BOT_TOKEN = os.getenv("MASTER_BOT_TOKEN", "")
+DEFAULT_NOTIFICATION_CHANNEL_ID = int(os.getenv("DEFAULT_NOTIFICATION_CHANNEL_ID", "-1003422687545"))
 
 
 def load_bots_config() -> list[dict]:
