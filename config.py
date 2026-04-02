@@ -8,6 +8,7 @@ ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite://data/db.sqlite3")
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Berlin")
 BOT_PASSWORD = os.getenv("BOT_PASSWORD", "Nomad1234")
+MASTER_BOT_TOKEN = os.getenv("MASTER_BOT_TOKEN", "")
 
 
 def load_bots_config() -> list[dict]:

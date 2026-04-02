@@ -2,6 +2,19 @@ from tortoise import fields
 from tortoise.models import Model
 
 
+class BotConfig(Model):
+    id = fields.IntField(pk=True)
+    bot_token = fields.CharField(max_length=255, unique=True)
+    channel_id = fields.BigIntField()
+    notification_channel_id = fields.BigIntField(null=True)
+    timezone = fields.CharField(max_length=64, default="Europe/Berlin")
+    is_active = fields.BooleanField(default=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "bot_configs"
+
+
 class BotSettings(Model):
     id = fields.IntField(pk=True)
     bot_id = fields.BigIntField(unique=True)
