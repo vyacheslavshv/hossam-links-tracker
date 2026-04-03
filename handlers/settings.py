@@ -3,7 +3,7 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKe
 from loguru import logger
 
 from .filters import IsRootAdmin
-from models import BotSettings, InviteLink
+from models import BotSettings, InviteLink, JoinRequest
 
 
 async def get_settings(bot_id: int) -> BotSettings:
@@ -36,6 +36,13 @@ async def build_settings_content(bot_config: dict) -> tuple[str, InlineKeyboardM
             callback_data="toggle:notifications",
         )],
     ]
+
+    pending_count = await JoinRequest.filter(bot_id=bot_config["bot_id"], status="pending").count()
+    if pending_count > 0:
+        buttons.append([InlineKeyboardButton(
+            text=f"🧹 Reset pending requests ({pending_count})",
+            callback_data="reset_pending",
+        )])
 
     links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).order_by("-created_at")
     if links:
@@ -109,6 +116,37 @@ async def cb_delete_link(callback: CallbackQuery, bot_config: dict):
         pass
 
 
+async def cb_reset_pending_confirm(callback: CallbackQuery, bot_config: dict):
+    pending_count = await JoinRequest.filter(bot_id=bot_config["bot_id"], status="pending").count()
+    if pending_count == 0:
+        await callback.answer("No pending requests", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=f"✅ Yes, reset {pending_count}", callback_data="reset_pending_yes"),
+            InlineKeyboardButton(text="❌ No", callback_data="settings"),
+        ],
+    ])
+    await callback.message.edit_text(
+        f"Are you sure you want to reset <b>{pending_count}</b> pending requests?",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+async def cb_reset_pending_yes(callback: CallbackQuery, bot_config: dict):
+    deleted = await JoinRequest.filter(bot_id=bot_config["bot_id"], status="pending").delete()
+
+    await callback.answer(f"🧹 {deleted} pending requests removed", show_alert=True)
+
+    text, markup = await build_settings_content(bot_config)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        pass
+
+
 def create_router() -> Router:
     router = Router()
     router.callback_query.register(cb_settings, F.data == "settings", IsRootAdmin())
@@ -116,4 +154,6 @@ def create_router() -> Router:
     router.callback_query.register(cb_toggle_auto_approve, F.data == "toggle:auto_approve", IsRootAdmin())
     router.callback_query.register(cb_toggle_notifications, F.data == "toggle:notifications", IsRootAdmin())
     router.callback_query.register(cb_delete_link, F.data.startswith("del_link:"), IsRootAdmin())
+    router.callback_query.register(cb_reset_pending_confirm, F.data == "reset_pending", IsRootAdmin())
+    router.callback_query.register(cb_reset_pending_yes, F.data == "reset_pending_yes", IsRootAdmin())
     return router
