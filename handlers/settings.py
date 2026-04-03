@@ -37,19 +37,18 @@ async def build_settings_content(bot_config: dict) -> tuple[str, InlineKeyboardM
         )],
     ]
 
-    active_links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False)
+    links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).order_by("-created_at")
+    link_ids = [link.id for link in links]
     pending_count = 0
-    if active_links:
+    if link_ids:
         pending_count = await JoinRequest.filter(
-            invite_link__in=active_links, status="pending"
+            invite_link_id__in=link_ids, status="pending"
         ).count()
     if pending_count > 0:
         buttons.append([InlineKeyboardButton(
             text=f"🧹 Reset pending requests ({pending_count})",
             callback_data="reset_pending",
         )])
-
-    links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).order_by("-created_at")
     if links:
         for link in links:
             buttons.append([InlineKeyboardButton(
@@ -122,11 +121,11 @@ async def cb_delete_link(callback: CallbackQuery, bot_config: dict):
 
 
 async def cb_reset_pending_confirm(callback: CallbackQuery, bot_config: dict):
-    active_links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False)
+    link_ids = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).values_list("id", flat=True)
     pending_count = 0
-    if active_links:
+    if link_ids:
         pending_count = await JoinRequest.filter(
-            invite_link__in=active_links, status="pending"
+            invite_link_id__in=link_ids, status="pending"
         ).count()
     if pending_count == 0:
         await callback.answer("No pending requests", show_alert=True)
@@ -146,11 +145,11 @@ async def cb_reset_pending_confirm(callback: CallbackQuery, bot_config: dict):
 
 
 async def cb_reset_pending_yes(callback: CallbackQuery, bot_config: dict):
-    active_links = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False)
+    link_ids = await InviteLink.filter(bot_id=bot_config["bot_id"], revoked=False).values_list("id", flat=True)
     deleted = 0
-    if active_links:
+    if link_ids:
         deleted = await JoinRequest.filter(
-            invite_link__in=active_links, status="pending"
+            invite_link_id__in=link_ids, status="pending"
         ).delete()
 
     await callback.answer(f"🧹 {deleted} pending requests removed", show_alert=True)
