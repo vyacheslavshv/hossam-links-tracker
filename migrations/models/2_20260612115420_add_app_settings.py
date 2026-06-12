@@ -8,7 +8,7 @@ async def upgrade(db: BaseDBAsyncClient) -> str:
         CREATE TABLE IF NOT EXISTS "app_settings" (
     "key" VARCHAR(64) NOT NULL PRIMARY KEY,
     "value" TEXT
-) /* Global key\/value settings shared by the master bot (not per-worker-bot). */;"""
+) /* Global key-value settings shared by the master bot (not per-worker-bot). */;"""
 
 
 async def downgrade(db: BaseDBAsyncClient) -> str:

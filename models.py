@@ -84,7 +84,7 @@ class MemberEvent(Model):
 
 
 class AppSetting(Model):
-    """Global key/value settings shared by the master bot (not per-worker-bot)."""
+    """Global key-value settings shared by the master bot (not per-worker-bot)."""
     key = fields.CharField(max_length=64, pk=True)
     value = fields.TextField(null=True)
 
