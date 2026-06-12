@@ -20,7 +20,7 @@ from loguru import logger
 
 from bot_manager import BotManager
 from config import ADMIN_IDS, DEFAULT_NOTIFICATION_CHANNEL_ID
-from models import BotConfig
+from models import BotConfig, AppSetting
 
 
 class AddBot(StatesGroup):
@@ -29,8 +29,36 @@ class AddBot(StatesGroup):
     notification_channel_id = State()
 
 
+class SetDefault(StatesGroup):
+    channel_id = State()
+
+
+DEFAULT_NOTIF_KEY = "default_notification_channel_id"
+
+
 def _is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
+
+
+async def get_default_notif_channel() -> int | None:
+    """Current default notification channel: admin-set value, else the built-in."""
+    row = await AppSetting.get_or_none(key=DEFAULT_NOTIF_KEY)
+    if row and row.value:
+        try:
+            return int(row.value)
+        except (TypeError, ValueError):
+            pass
+    return DEFAULT_NOTIFICATION_CHANNEL_ID
+
+
+async def set_default_notif_channel(value: int | None) -> None:
+    """Store the default notification channel, or reset to the built-in (value=None)."""
+    if value is None:
+        await AppSetting.filter(key=DEFAULT_NOTIF_KEY).delete()
+    else:
+        await AppSetting.update_or_create(
+            key=DEFAULT_NOTIF_KEY, defaults={"value": str(value)}
+        )
 
 
 def create_master_router(manager: BotManager) -> Router:
@@ -41,6 +69,7 @@ def create_master_router(manager: BotManager) -> Router:
     async def _send_main_menu(target, manager: BotManager):
         """Send main menu. target is Message or CallbackQuery."""
         running = manager.running_bots
+        default_notif = await get_default_notif_channel()
         lines = ["<b>🤖 Bot Manager</b>\n"]
         if running:
             lines.append(f"Running bots: <b>{len(running)}</b>\n")
@@ -52,9 +81,14 @@ def create_master_router(manager: BotManager) -> Router:
         else:
             lines.append("No bots running.")
 
+        lines.append(
+            f"\n📢 Default notification channel: <code>{default_notif}</code>"
+        )
+
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="➕ Add Bot", callback_data="master:add")],
             [InlineKeyboardButton(text="🗑 Remove Bot", callback_data="master:remove_list")],
+            [InlineKeyboardButton(text="📢 Set default channel", callback_data="master:set_default")],
             [InlineKeyboardButton(text="🔄 Refresh", callback_data="master:refresh")],
         ])
 
@@ -128,12 +162,14 @@ def create_master_router(manager: BotManager) -> Router:
             return
         await state.update_data(channel_id=channel_id)
         await state.set_state(AddBot.notification_channel_id)
+        default_notif = await get_default_notif_channel()
         skip_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⏭ Skip (default channel)", callback_data="master:skip_notif")],
+            [InlineKeyboardButton(text=f"⏭ Use default ({default_notif})", callback_data="master:skip_notif")],
             [InlineKeyboardButton(text="❌ Cancel", callback_data="master:cancel")],
         ])
         await message.answer(
-            "Send the <b>notification channel ID</b>, or skip to use the default channel:",
+            "Send the <b>notification channel ID</b>, "
+            f"or use the default <code>{default_notif}</code>:",
             reply_markup=skip_kb,
         )
 
@@ -143,9 +179,10 @@ def create_master_router(manager: BotManager) -> Router:
             return await callback.answer("⛔️", show_alert=True)
         data = await state.get_data()
         await state.clear()
+        default_notif = await get_default_notif_channel()
         await callback.message.edit_text("⏳ Starting bot...")
         await callback.answer()
-        await _finish_add_bot(callback.message, manager, data["token"], data["channel_id"], DEFAULT_NOTIFICATION_CHANNEL_ID)
+        await _finish_add_bot(callback.message, manager, data["token"], data["channel_id"], default_notif)
 
     @router.message(AddBot.notification_channel_id)
     async def on_notification_channel_id(message: Message, state: FSMContext):
@@ -274,6 +311,41 @@ def create_master_router(manager: BotManager) -> Router:
         else:
             await callback.message.edit_text("⚠️ Bot was not running.", reply_markup=keyboard)
         await callback.answer()
+
+    # ── Set default notification channel ─────────────────────
+
+    @router.callback_query(F.data == "master:set_default")
+    async def cb_set_default(callback: CallbackQuery, state: FSMContext):
+        if not _is_admin(callback.from_user.id):
+            return await callback.answer("⛔️", show_alert=True)
+        current = await get_default_notif_channel()
+        await state.set_state(SetDefault.channel_id)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Cancel", callback_data="master:cancel")],
+        ])
+        await callback.message.edit_text(
+            f"Current default notification channel:\n<code>{current}</code>\n\n"
+            "Send a new channel ID (negative number) to use as the default when "
+            "adding bots:",
+            reply_markup=kb,
+        )
+        await callback.answer()
+
+    @router.message(SetDefault.channel_id)
+    async def on_set_default(message: Message, state: FSMContext):
+        if not _is_admin(message.from_user.id):
+            return
+        try:
+            channel_id = int(message.text.strip())
+        except (ValueError, AttributeError):
+            await message.answer("❌ Must be a number. Try again:")
+            return
+        await set_default_notif_channel(channel_id)
+        await state.clear()
+        await message.answer(
+            f"✅ Default notification channel set to <code>{channel_id}</code>."
+        )
+        await _send_main_menu(message, manager)
 
     # ── Cancel ───────────────────────────────────────────────
 

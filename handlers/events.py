@@ -108,17 +108,16 @@ def format_request_notification(user, chat, invite_url: str | None, timestamp: s
 async def on_join_request(event: ChatJoinRequest, bot_config: dict):
     bot_id = bot_config["bot_id"]
     user = event.from_user
-    chat = event.chat
 
     invite_url = event.invite_link.invite_link if event.invite_link else None
     db_link = await find_invite_link(bot_id, invite_url)
 
-    tz = ZoneInfo(bot_config.get("timezone", "Europe/Berlin"))
-    timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-
     settings = await get_settings(bot_id)
 
-    if settings.auto_approve:
+    # Auto-approve ONLY requests that came through a link created via this bot.
+    # Requests coming through the channel's own / external links are left pending
+    # so the admin can still handle them from Telegram's native member-requests list.
+    if settings.auto_approve and db_link is not None:
         try:
             await event.approve()
         except Exception as e:
@@ -143,7 +142,11 @@ async def on_join_request(event: ChatJoinRequest, bot_config: dict):
             status="pending",
         )
 
-    logger.info(f"[{bot_id}] Join request from {user.id} ({user.full_name})")
+    logger.info(
+        f"[{bot_id}] Join request from {user.id} ({user.full_name}) "
+        f"via {'tracked' if db_link else 'untracked'} link "
+        f"(auto_approve={settings.auto_approve})"
+    )
 
 
 # ── ChatMemberUpdated handler ──
